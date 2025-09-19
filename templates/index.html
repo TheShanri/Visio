@@ -3,227 +3,246 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Welcome</title>
-    <!-- Custom CSS -->
+    <meta name="theme-color" content="#0f172a" />
+    <title>VISIO | Infusion Insights</title>
+    <link
+      rel="preconnect"
+      href="https://fonts.googleapis.com"
+    />
+    <link
+      rel="preconnect"
+      href="https://fonts.gstatic.com"
+      crossorigin
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <link
       href="{{ url_for('static', filename='css/styles.css') }}"
       rel="stylesheet"
     />
-    <!-- Include D3.js from CDN -->
-    <script src="https://d3js.org/d3.v7.min.js"></script>
-    <!-- Include the createLineChart.js script -->
-    <script src="{{ url_for('static', filename='js/LineChart.js') }}"></script>
   </head>
   <body>
-    <header class="banner center-align">
+    <header class="site-header">
       <h1>VISIO</h1>
+      <p>
+        Upload your bladder infusion session to explore interactive charts,
+        surface trends, and export trimmed data for your clinical workflow.
+      </p>
     </header>
-    <div class="container center-align">
-      <h1>Welcome</h1>
-      <form
-        action="/"
-        method="post"
-        enctype="multipart/form-data"
-        autocomplete="off"
-      >
-        <label for="file-upload" class="file-upload-button">
-          <span>Upload GMC data</span>
-        </label>
-        <input
-          id="file-upload"
-          type="file"
-          name="file"
-          accept=".txt, .csv"
-          required
-          onchange="this.form.submit()"
-        />
-      </form>
+    <main class="page-content">
+      <div class="layout-grid">
+        <section class="upload-card" aria-labelledby="upload-title">
+          <h2 id="upload-title">Upload infusion session</h2>
+          <p>
+            Drop in the raw output from the VISIO system (.txt or .csv) and we
+            will automatically prepare clean charts and summary metrics.
+          </p>
+          {% if error %}
+          <div
+            class="status-badge"
+            data-status-type="error"
+            role="alert"
+          >
+            {{ error }}
+          </div>
+          {% endif %}
+          <form
+            action="/"
+            method="post"
+            enctype="multipart/form-data"
+            autocomplete="off"
+            id="uploadForm"
+          >
+            <label
+              class="upload-dropzone"
+              data-dropzone
+              tabindex="0"
+            >
+              <span class="upload-instruction">Drag &amp; drop to upload</span>
+              <span class="upload-hint">or click to browse your files</span>
+              <span class="upload-file-name" id="file-name"
+                >No file selected yet</span
+              >
+              <input
+                id="file-upload"
+                type="file"
+                name="file"
+                accept=".txt,.csv"
+                required
+                aria-describedby="file-requirements"
+              />
+            </label>
+            <button
+              class="button button-primary"
+              id="uploadButton"
+              type="submit"
+              disabled
+            >
+              Process file
+            </button>
+            <small id="file-requirements">
+              Supported exports include tab-separated VISIO logs. We never store
+              your data — processing happens instantly in your browser session.
+            </small>
+          </form>
+        </section>
 
-      {% if data %}
-      <div id="chart-container">
-        <h2>Elapsed Time vs. Scale</h2>
-        <svg
-          id="chart1"
-          width="100%"
-          height="auto"
-          viewBox="0 0 600 400"
-          preserveAspectRatio="xMidYMid meet"
-        ></svg>
+        <section class="dashboard-card" aria-live="polite">
+          {% if data %}
+          <div class="dashboard-intro">
+            <h2>Session overview</h2>
+            <p class="upload-hint">
+              Review the automatically generated insights below. Use the trimmer
+              to exclude artefacts from the bladder pressure trace before
+              exporting your report.
+            </p>
+          </div>
+          <div class="metrics-grid" id="summary-cards"></div>
 
-        <h2>Elapsed Time vs. Tot Infused Vol</h2>
-        <svg
-          id="chart2"
-          width="100%"
-          height="auto"
-          viewBox="0 0 600 400"
-          preserveAspectRatio="xMidYMid meet"
-        ></svg>
+          <div class="chart-grid">
+            <article class="chart-card">
+              <div>
+                <h3 id="chart-scale-title">Scale vs. elapsed time</h3>
+                <p>
+                  Monitor the delivery scale readings to identify pump stability
+                  throughout the session.
+                </p>
+              </div>
+              <svg
+                id="chart-scale"
+                role="img"
+                aria-labelledby="chart-scale-title"
+              ></svg>
+            </article>
 
-        <h2>Elapsed Time vs. Bladder Pressure</h2>
-        <svg
-          id="chart3"
-          width="100%"
-          height="auto"
-          viewBox="0 0 600 400"
-          preserveAspectRatio="xMidYMid meet"
-        ></svg>
-        <button id="trimGraphButton">Trim Graph</button>
+            <article class="chart-card">
+              <div>
+                <h3 id="chart-volume-title">Total infused volume</h3>
+                <p>
+                  Track the cumulative infused volume and correlate it with
+                  observed patient feedback.
+                </p>
+              </div>
+              <svg
+                id="chart-volume"
+                role="img"
+                aria-labelledby="chart-volume-title"
+              ></svg>
+            </article>
+
+            <article class="chart-card">
+              <div>
+                <h3 id="chart-pressure-title">Bladder pressure</h3>
+                <p>
+                  Pinpoint meaningful pressure shifts and trim artefacts before
+                  exporting the dataset.
+                </p>
+              </div>
+              <svg
+                id="chart-pressure"
+                role="img"
+                aria-labelledby="chart-pressure-title"
+              ></svg>
+              <div class="chart-actions">
+                <button
+                  class="button button-secondary"
+                  id="trimGraphButton"
+                  type="button"
+                >
+                  Open trimmer
+                </button>
+              </div>
+              <ul class="trim-summary" id="trim-summary">
+                <li>
+                  <span>No trims applied yet</span>
+                  <span></span>
+                </li>
+              </ul>
+              <div
+                class="status-badge"
+                id="trim-status"
+                data-status-type="info"
+                role="status"
+              >
+                Select two points on the interactive chart to choose the region
+                you would like to exclude.
+              </div>
+            </article>
+          </div>
+          {% else %}
+          <div class="empty-state">
+            <h2>Ready when you are</h2>
+            <p>
+              Upload a VISIO export to unlock interactive analytics, peak
+              detection workflows, and rich PDF reporting — all in one place.
+            </p>
+          </div>
+          {% endif %}
+        </section>
       </div>
+    </main>
 
-    </div>
-
-    <!-- The Modal -->
-    <div id="trimGraphModal" class="modal">
-      <div class="modal-content">
-        <span class="close">&times;</span>
-        <h2>Trim Graph</h2>
-        <svg id="chart4" width="100%" height="auto" viewBox="0 0 600 400" preserveAspectRatio="xMidYMid meet"></svg>
-        <button id="applyTrimButton">Apply Trim</button>
-        <button id="restoreOriginalButton">Restore to Original</button>
+    {% if data %}
+    <div
+      id="trimGraphModal"
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      aria-hidden="true"
+      aria-labelledby="trimGraphTitle"
+    >
+      <div class="modal__dialog">
+        <button
+          class="modal__close"
+          type="button"
+          data-close-modal
+          aria-label="Close trimming dialog"
+        >
+          &times;
+        </button>
+        <h2 id="trimGraphTitle">Trim bladder pressure data</h2>
+        <p class="upload-hint">
+          Click twice on the interactive chart to select the start and end of a
+          section you would like to remove. You can add multiple trims and undo
+          them at any time.
+        </p>
+        <svg id="chart-pressure-interactive"></svg>
+        <div class="modal__actions">
+          <button
+            id="applyTrimButton"
+            class="button button-primary"
+            type="button"
+            disabled
+          >
+            Apply selection
+          </button>
+          <button
+            id="undoTrimButton"
+            class="button button-secondary"
+            type="button"
+            disabled
+          >
+            Undo last trim
+          </button>
+          <button
+            id="restoreOriginalButton"
+            class="button button-ghost"
+            type="button"
+            disabled
+          >
+            Restore original data
+          </button>
+        </div>
       </div>
     </div>
-    <script>
-      // Parse the JSON data passed from Flask
-      var dataGraph1 = JSON.parse({{ data[0]|tojson }});
-      var dataGraph2 = JSON.parse({{ data[1]|tojson }});
-      var dataGraph3 = JSON.parse({{ data[2]|tojson }});
+    <script id="chart-data" type="application/json">{{ data|tojson }}</script>
+    {% endif %}
 
-      // Initialize trimedDataGraph3 with the original data
-      var trimedDataGraph3 = dataGraph3.slice(); // Create a shallow copy
-
-      // Extract the common Elapsed Time
-      var elapsedTime = dataGraph1.map(d => d['Elapsed Time']);
-
-      // Extract specific parts of the data for each chart
-      var scale = dataGraph1.map(d => d['Scale']);
-      var totInfusedVol = dataGraph2.map(d => d['Tot Infused Vol']);
-      var bladderPressure = dataGraph3.map(d => d['Bladder Pressure']);
-
-      // Create the charts using the LineChart class
-      new LineChart("#chart1", elapsedTime, scale, "Elapsed Time", "Scale");
-      new LineChart("#chart2", elapsedTime, totInfusedVol, "Elapsed Time", "Tot Infused Vol");
-      new LineChart("#chart3", elapsedTime, bladderPressure, "Elapsed Time", "Bladder Pressure");
-
-      // Get the modal
-      var modal = document.getElementById("trimGraphModal");
-
-      // Get the button that opens the modal
-      var btn = document.getElementById("trimGraphButton");
-
-      // Get the <span> element that closes the modal
-      var span = document.getElementsByClassName("close")[0];
-
-      // When the user clicks the button, open the modal
-      btn.onclick = function () {
-        modal.style.display = "block";
-      };
-
-      // When the user clicks on <span> (x), close the modal
-      span.onclick = function () {
-        modal.style.display = "none";
-      };
-
-      // When the user clicks anywhere outside of the modal, close it
-      window.onclick = function (event) {
-        if (event.target == modal) {
-          modal.style.display = "none";
-        }
-      };
-
-      // Initialize the interactive line chart
-      var interactiveChart;
-
-      function initializeInteractiveChart() {
-        // Remove any existing SVG elements
-        d3.select("#chart4").selectAll("*").remove();
-
-        // Create the interactive chart
-        interactiveChart = new InteractiveLineChart(
-          "#chart4",
-          trimedDataGraph3.map(d => d['Elapsed Time']),
-          trimedDataGraph3.map(d => d['Bladder Pressure']),
-          "Elapsed Time",
-          "Bladder Pressure",
-          returnTrimPoints
-        );
-      }
-
-      // Call the function to initialize the chart
-      initializeInteractiveChart();
-
-      // Define a variable to store the coordinates
-      let currentTrimPoints = null;
-
-      // Define an array to store all trim intervals
-      let trimIntervals = [];
-
-      // Define the callback function
-      function returnTrimPoints(trimPoints) {
-        currentTrimPoints = trimPoints;
-        console.log("Trim points updated:", currentTrimPoints);
-      }
-
-      // Add event listener for the "Apply Trim" button
-      document.getElementById("applyTrimButton").onclick = function () {
-        if (currentTrimPoints) {
-          // Add the current trim points to the array
-          trimIntervals.push([...currentTrimPoints]); // Use spread operator to clone the array
-
-          // Reset trimedDataGraph3 to the original data
-          trimedDataGraph3 = dataGraph3.slice(); // Create a shallow copy
-
-          // Apply all trims cumulatively
-          trimIntervals.forEach(function (interval) {
-            trimedDataGraph3 = trimedDataGraph3.filter(d => {
-              return d['Elapsed Time'] < interval[0] || d['Elapsed Time'] > interval[1];
-            });
-          });
-
-          var trimmedElapsedTime = trimedDataGraph3.map(d => d['Elapsed Time']);
-          var trimmedBladderPressure = trimedDataGraph3.map(d => d['Bladder Pressure']);
-
-          // Update the charts
-          d3.select("#chart3").selectAll("*").remove();
-          new LineChart("#chart3", trimmedElapsedTime, trimmedBladderPressure, "Elapsed Time", "Bladder Pressure");
-
-          // Update the interactive chart without closing the modal
-          initializeInteractiveChart();
-
-          // Reset currentTrimPoints
-          currentTrimPoints = null;
-        }
-      };
-
-      // Add event listener for the "Restore to Original" button
-      document.getElementById("restoreOriginalButton").onclick = function () {
-        // Clear all trim intervals
-        trimIntervals = [];
-
-        // Reset trimedDataGraph3 to the original data
-        trimedDataGraph3 = dataGraph3.slice();
-
-        // Extract the original data
-        var originalElapsedTime = trimedDataGraph3.map(d => d['Elapsed Time']);
-        var originalBladderPressure = trimedDataGraph3.map(d => d['Bladder Pressure']);
-
-        // Update the charts with original data
-        d3.select("#chart3").selectAll("*").remove();
-        new LineChart("#chart3", originalElapsedTime, originalBladderPressure, "Elapsed Time", "Bladder Pressure");
-
-        // Update the interactive chart
-        initializeInteractiveChart();
-
-        // Reset currentTrimPoints
-        currentTrimPoints = null;
-
-        console.log("Data restored to original.");
-      };
-    </script>
-    {% else %}
-    <script>
-      console.warn("No data available to render charts.");
-      // Optionally, initialize empty data or handle the absence of data
-    </script>
-  {% endif %}
+    <script src="https://d3js.org/d3.v7.min.js" defer></script>
+    <script src="{{ url_for('static', filename='js/LineChart.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/Trimmer.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}" defer></script>
   </body>
 </html>

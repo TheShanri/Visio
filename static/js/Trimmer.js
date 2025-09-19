@@ -1,81 +1,236 @@
 class Trimmer {
-    constructor(data, chartSelector, interactiveChartSelector, callback) {
-      this.originalData = data.slice(); // Store a copy of the original data
-      this.trimmedData = data.slice(); // Initialize trimmed data
-      this.chartSelector = chartSelector;
-      this.interactiveChartSelector = interactiveChartSelector;
-      this.callback = callback;
-      this.trimIntervals = [];
-      this.currentTrimPoints = null;
-  
-      this.initializeInteractiveChart();
+  constructor(
+    data,
+    chartSelector,
+    interactiveChartSelector,
+    onChange,
+    options = {}
+  ) {
+    this.originalData = Array.isArray(data)
+      ? data.map((point) => ({ ...point }))
+      : [];
+    this.trimmedData = this.originalData.slice();
+    this.chartSelector = chartSelector;
+    this.interactiveChartSelector = interactiveChartSelector;
+    this.onChange = onChange;
+    this.trimIntervals = [];
+    this.currentTrimPoints = null;
+    this.lineChartOptions = options.lineChartOptions || {};
+    this.interactiveOptions = options.interactiveOptions || {};
+
+    this.renderPrimaryChart();
+    this.initializeInteractiveChart();
+    this.notifyChange({
+      message: this.originalData.length
+        ? 'Select two points on the interactive chart to trim that range.'
+        : 'No bladder pressure data available to trim.',
+      messageType: this.originalData.length ? 'info' : 'warning',
+    });
+  }
+
+  renderPrimaryChart() {
+    const selection = d3.select(this.chartSelector);
+    if (selection.empty()) {
+      return;
     }
-  
-    initializeInteractiveChart() {
-      // Remove any existing SVG elements
-      d3.select(this.interactiveChartSelector).selectAll("*").remove();
-  
-      // Create the interactive chart
-      this.interactiveChart = new InteractiveLineChart(
-        this.interactiveChartSelector,
-        this.trimmedData.map(d => d['Elapsed Time']),
-        this.trimmedData.map(d => d['Bladder Pressure']),
-        "Elapsed Time",
-        "Bladder Pressure",
-        this.returnTrimPoints.bind(this)
-      );
+
+    selection.selectAll('*').remove();
+
+    const elapsed = this.trimmedData.map((d) => d['Elapsed Time']);
+    const pressure = this.trimmedData.map((d) => d['Bladder Pressure']);
+
+    this.primaryChart = new LineChart(
+      this.chartSelector,
+      elapsed,
+      pressure,
+      'Elapsed Time (s)',
+      'Bladder Pressure (cmH₂O)',
+      Object.assign({ color: '#7c3aed' }, this.lineChartOptions)
+    );
+  }
+
+  initializeInteractiveChart() {
+    const selection = d3.select(this.interactiveChartSelector);
+    if (selection.empty()) {
+      return;
     }
-  
-    returnTrimPoints(trimPoints) {
-      this.currentTrimPoints = trimPoints;
-      console.log("Trim points updated:", this.currentTrimPoints);
-    }
-  
-    applyTrim() {
-      console.log("Apply Trim button clicked");
-      if (this.currentTrimPoints) {
-        // Add the current trim points to the array
-        this.trimIntervals.push([...this.currentTrimPoints]); // Use spread operator to clone the array
-  
-        // Reset trimmedData to the original data
-        this.trimmedData = this.originalData.slice(); // Create a shallow copy
-  
-        // Apply all trims cumulatively
-        this.trimIntervals.forEach(interval => {
-          this.trimmedData = this.trimmedData.filter(d => {
-            return d['Elapsed Time'] < interval[0] || d['Elapsed Time'] > interval[1];
-          });
-        });
-  
-        this.updateCharts();
-        this.currentTrimPoints = null;
+
+    selection.selectAll('*').remove();
+
+    this.interactiveChart = new InteractiveLineChart(
+      this.interactiveChartSelector,
+      this.trimmedData.map((d) => d['Elapsed Time']),
+      this.trimmedData.map((d) => d['Bladder Pressure']),
+      'Elapsed Time (s)',
+      'Bladder Pressure (cmH₂O)',
+      this.handleTrimPreview.bind(this),
+      Object.assign({ color: '#7c3aed' }, this.interactiveOptions)
+    );
+  }
+
+  handleTrimPreview(trimPoints) {
+    this.currentTrimPoints = Array.isArray(trimPoints)
+      ? trimPoints.slice()
+      : null;
+
+    const selection = this.getSortedSelection();
+    let message = 'Click twice on the chart to define a trim interval.';
+    let messageType = 'info';
+
+    if (selection && selection.length === 1) {
+      message = 'Select a second point to finish the trim interval.';
+    } else if (selection && selection.length === 2) {
+      if (selection[0] === selection[1]) {
+        message = 'Please choose two different points to create a valid range.';
+        messageType = 'warning';
       } else {
-        console.log("No trim points set");
+        message = `Ready to trim ${this.formatInterval(selection)}.`;
+        messageType = 'success';
       }
     }
-  
-    restoreOriginal() {
-      // Clear all trim intervals
-      this.trimIntervals = [];
-  
-      // Reset trimmedData to the original data
-      this.trimmedData = this.originalData.slice();
-  
-      this.updateCharts();
-      this.currentTrimPoints = null;
-      console.log("Data restored to original.");
-    }
-  
-    updateCharts() {
-      const elapsedTime = this.trimmedData.map(d => d['Elapsed Time']);
-      const bladderPressure = this.trimmedData.map(d => d['Bladder Pressure']);
-  
-      // Update the charts
-      d3.select(this.chartSelector).selectAll("*").remove();
-      new LineChart(this.chartSelector, elapsedTime, bladderPressure, "Elapsed Time", "Bladder Pressure");
-  
-      // Update the interactive chart
-      this.initializeInteractiveChart();
-    }
+
+    this.notifyChange({
+      message,
+      messageType,
+    });
   }
-  
+
+  applyTrim() {
+    const selection = this.getSortedSelection();
+
+    if (!selection || selection.length !== 2) {
+      this.notifyChange({
+        message: 'Select two points on the interactive chart before applying a trim.',
+        messageType: 'warning',
+      });
+      return false;
+    }
+
+    if (selection[0] === selection[1]) {
+      this.notifyChange({
+        message: 'Please choose two different points to create a valid range.',
+        messageType: 'warning',
+      });
+      return false;
+    }
+
+    this.trimIntervals.push(selection);
+    this.currentTrimPoints = null;
+
+    this.recalculateTrimmedData();
+    this.renderPrimaryChart();
+    this.initializeInteractiveChart();
+
+    this.notifyChange({
+      message: `Trim applied (${this.formatInterval(selection)}).`,
+      messageType: 'success',
+    });
+
+    return true;
+  }
+
+  undoLastTrim() {
+    if (!this.trimIntervals.length) {
+      this.notifyChange({
+        message: 'There are no trims to undo.',
+        messageType: 'info',
+      });
+      return false;
+    }
+
+    const removed = this.trimIntervals.pop();
+    this.recalculateTrimmedData();
+    this.renderPrimaryChart();
+    this.initializeInteractiveChart();
+
+    this.notifyChange({
+      message: `Removed trim ${this.formatInterval(removed)}.`,
+      messageType: 'info',
+    });
+
+    return true;
+  }
+
+  restoreOriginal() {
+    if (!this.trimIntervals.length) {
+      this.notifyChange({
+        message: 'The chart is already showing the original data.',
+        messageType: 'info',
+      });
+      return false;
+    }
+
+    this.trimIntervals = [];
+    this.currentTrimPoints = null;
+    this.trimmedData = this.originalData.slice();
+    this.renderPrimaryChart();
+    this.initializeInteractiveChart();
+
+    this.notifyChange({
+      message: 'All trims have been cleared and the original data restored.',
+      messageType: 'info',
+    });
+
+    return true;
+  }
+
+  recalculateTrimmedData() {
+    this.trimmedData = this.originalData.filter((point) =>
+      this.trimIntervals.every(([start, end]) => {
+        const min = Math.min(start, end);
+        const max = Math.max(start, end);
+        return (
+          point['Elapsed Time'] < min || point['Elapsed Time'] > max
+        );
+      })
+    );
+  }
+
+  getSortedSelection() {
+    if (!this.currentTrimPoints || !this.currentTrimPoints.length) {
+      return null;
+    }
+
+    return this.currentTrimPoints.slice().sort((a, b) => a - b);
+  }
+
+  getIntervals() {
+    return this.trimIntervals.map(([start, end], index) => ({
+      index,
+      start: Math.min(start, end),
+      end: Math.max(start, end),
+    }));
+  }
+
+  formatInterval(interval) {
+    if (!interval || interval.length < 2) {
+      return '';
+    }
+
+    const [start, end] = interval;
+    return `${start.toFixed(2)} – ${end.toFixed(2)} s`;
+  }
+
+  notifyChange(overrides = {}) {
+    if (typeof this.onChange !== 'function') {
+      return;
+    }
+
+    const selection = this.getSortedSelection();
+    this.onChange(
+      Object.assign(
+        {
+          trimmedData: this.trimmedData.slice(),
+          intervals: this.getIntervals(),
+          selection,
+          isSelectionValid:
+            Array.isArray(selection) &&
+            selection.length === 2 &&
+            selection[0] !== selection[1],
+          hasTrims: this.trimIntervals.length > 0,
+        },
+        overrides
+      )
+    );
+  }
+}
